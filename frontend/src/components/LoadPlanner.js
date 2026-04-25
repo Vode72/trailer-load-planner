@@ -144,13 +144,25 @@ const styles = {
     color: "#cbd5e1",
     cursor: "pointer",
     marginBottom: "4px"
+  },
+  calcBox: {
+    background: "rgba(249,115,22,0.1)",
+    border: "1px solid rgba(249,115,22,0.3)",
+    borderRadius: "8px",
+    padding: "12px 16px",
+    marginTop: "12px",
+    fontSize: "14px",
+    color: "#f1f5f9"
   }
 };
 
 function LoadPlanner() {
   const [name, setName] = useState("");
   const [weight, setWeight] = useState("");
-  const [volume, setVolume] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [palletWidth, setPalletWidth] = useState("");
+  const [palletLength, setPalletLength] = useState("");
+  const [palletHeight, setPalletHeight] = useState("");
   const [requiredTrailerType, setRequiredTrailerType] = useState("umpikaappi");
   const [requiredDeliverySite, setRequiredDeliverySite] = useState("laituri");
   const [requiresTemperature, setRequiresTemperature] = useState(false);
@@ -217,10 +229,38 @@ function LoadPlanner() {
 
   const isDualZone = selectedTrailerType === "umpikaappi 2:lla kylmäkoneella";
 
+  const getBarColor = (percent) => {
+    if (percent > 95) return "#ef4444";
+    if (percent > 80) return "#f59e0b";
+    return "#22c55e";
+  };
+
+  const calcLoadingMeters = () => {
+    if (!palletWidth || !palletLength || !quantity) return null;
+    return Math.round((parseFloat(palletWidth) * parseFloat(palletLength) / 2.4) * parseFloat(quantity) * 100) / 100;
+  };
+
+  const calcVolume = () => {
+    if (!palletWidth || !palletLength || !palletHeight || !quantity) return null;
+    return Math.round(parseFloat(palletWidth) * parseFloat(palletLength) * parseFloat(palletHeight) * parseFloat(quantity) * 100) / 100;
+  };
+
+  const resetForm = () => {
+    setName(""); setWeight(""); setQuantity("");
+    setPalletWidth(""); setPalletLength(""); setPalletHeight("");
+    setRequiredTrailerType("umpikaappi");
+    setRequiredDeliverySite("laituri");
+    setRequiresTemperature(false);
+    setMinTemperature(""); setMaxTemperature("");
+    setRequiredCompartment("koko kärry");
+    setNeedsSideLoading(false);
+    setEditingLoad(null);
+  };
+
   const handleAddLoad = async () => {
     setError("");
-    if (!name || !weight || !volume) {
-      setError("Täytä nimi, paino ja tilavuus.");
+    if (!name || !weight || !quantity || !palletWidth || !palletLength || !palletHeight) {
+      setError("Täytä kaikki pakolliset kentät.");
       return;
     }
     if (requiresTemperature) {
@@ -242,7 +282,10 @@ function LoadPlanner() {
         body: JSON.stringify({
           name,
           weight: Number(weight),
-          volume: Number(volume),
+          quantity: Number(quantity),
+          pallet_width: Number(palletWidth),
+          pallet_length: Number(palletLength),
+          pallet_height: Number(palletHeight),
           required_trailer_type: requiredTrailerType,
           required_delivery_site: requiredDeliverySite,
           min_temperature: requiresTemperature && minTemperature !== "" ? Number(minTemperature) : null,
@@ -258,13 +301,7 @@ function LoadPlanner() {
         setError(data.error || "Kuorman lisäys epäonnistui.");
         return;
       }
-      setName(""); setWeight(""); setVolume("");
-      setRequiredTrailerType("umpikaappi");
-      setRequiredDeliverySite("laituri");
-      setRequiresTemperature(false);
-      setMinTemperature(""); setMaxTemperature("");
-      setRequiredCompartment("koko kärry");
-      setNeedsSideLoading(false);
+      resetForm();
       fetchLoads();
     } catch (err) {
       setError("Palvelinyhteys epäonnistui.");
@@ -289,64 +326,66 @@ function LoadPlanner() {
     }
   };
 
-const handleEditLoad = (load) => {
-  setEditingLoad(load);
-  setName(load.name);
-  setWeight(load.weight);
-  setVolume(load.volume);
-  setRequiredTrailerType(load.required_trailer_type);
-  setRequiredDeliverySite(load.required_delivery_site);
-  setRequiresTemperature(load.min_temperature !== null || load.max_temperature !== null);
-  setMinTemperature(load.min_temperature ?? "");
-  setMaxTemperature(load.max_temperature ?? "");
-  setRequiredCompartment(load.required_compartment);
-  setNeedsSideLoading(load.needs_side_loading);
-  window.scrollTo({ top: 0, behavior: "smooth" });
-};
+  const handleEditLoad = (load) => {
+    setEditingLoad(load);
+    setName(load.name);
+    setWeight(load.weight);
+    setQuantity(load.quantity);
+    setPalletWidth(load.pallet_width);
+    setPalletLength(load.pallet_length);
+    setPalletHeight(load.pallet_height);
+    setRequiredTrailerType(load.required_trailer_type);
+    setRequiredDeliverySite(load.required_delivery_site);
+    setRequiresTemperature(load.min_temperature !== null || load.max_temperature !== null);
+    setMinTemperature(load.min_temperature ?? "");
+    setMaxTemperature(load.max_temperature ?? "");
+    setRequiredCompartment(load.required_compartment);
+    setNeedsSideLoading(load.needs_side_loading);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
-const handleUpdateLoad = async () => {
-  setError("");
-  if (!name || !weight || !volume) {
-    setError("Täytä nimi, paino ja tilavuus.");
-    return;
-  }
-  try {
-    const response = await fetch(`${API_URL}/${editingLoad.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        weight: Number(weight),
-        volume: Number(volume),
-        required_trailer_type: requiredTrailerType,
-        required_delivery_site: requiredDeliverySite,
-        min_temperature: requiresTemperature && minTemperature !== "" ? Number(minTemperature) : null,
-        max_temperature: requiresTemperature && maxTemperature !== "" ? Number(maxTemperature) : null,
-        required_compartment: requiresTemperature
-          ? requiredCompartment
-          : (requiredTrailerType === "umpikaappi 2:lla kylmäkoneella" ? "osasto ei väliä" : "koko kärry"),
-        needs_side_loading: needsSideLoading
-      })
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error || "Kuorman päivitys epäonnistui.");
+  const handleUpdateLoad = async () => {
+    setError("");
+    if (!name || !weight || !quantity || !palletWidth || !palletLength || !palletHeight) {
+      setError("Täytä kaikki pakolliset kentät.");
       return;
     }
-    setEditingLoad(null);
-    setName(""); setWeight(""); setVolume("");
-    setRequiredTrailerType("umpikaappi");
-    setRequiredDeliverySite("laituri");
-    setRequiresTemperature(false);
-    setMinTemperature(""); setMaxTemperature("");
-    setRequiredCompartment("koko kärry");
-    setNeedsSideLoading(false);
-    fetchLoads();
-  } catch (err) {
-    setError("Palvelinyhteys epäonnistui.");
-  }
-};
-  
+    try {
+      const response = await fetch(`${API_URL}/${editingLoad.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          weight: Number(weight),
+          quantity: Number(quantity),
+          pallet_width: Number(palletWidth),
+          pallet_length: Number(palletLength),
+          pallet_height: Number(palletHeight),
+          required_trailer_type: requiredTrailerType,
+          required_delivery_site: requiredDeliverySite,
+          min_temperature: requiresTemperature && minTemperature !== "" ? Number(minTemperature) : null,
+          max_temperature: requiresTemperature && maxTemperature !== "" ? Number(maxTemperature) : null,
+          required_compartment: requiresTemperature
+            ? requiredCompartment
+            : (requiredTrailerType === "umpikaappi 2:lla kylmäkoneella" ? "osasto ei väliä" : "koko kärry"),
+          needs_side_loading: needsSideLoading
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error || "Kuorman päivitys epäonnistui.");
+        return;
+      }
+      resetForm();
+      fetchLoads();
+    } catch (err) {
+      setError("Palvelinyhteys epäonnistui.");
+    }
+  };
+
+  const lm = calcLoadingMeters();
+  const vol = calcVolume();
+
   return (
     <div style={{ background: "transparent", minHeight: "100vh", padding: "24px" }}>
       <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
@@ -370,7 +409,6 @@ const handleUpdateLoad = async () => {
               <option key={type} value={type}>{type}</option>
             ))}
           </select>
-
           <div style={{ marginTop: "16px" }}>
             <span style={styles.label}>Lämpötila-asetukset</span>
             {isDualZone ? (
@@ -389,7 +427,9 @@ const handleUpdateLoad = async () => {
         </div>
 
         <div style={styles.section}>
-          <div style={styles.sectionTitle}>Lisää kuorma</div>
+          <div style={styles.sectionTitle}>
+            {editingLoad ? "Muokkaa kuormaa" : "Lisää kuorma"}
+          </div>
           {error && <div style={styles.errorBox}>{error}</div>}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
@@ -404,10 +444,41 @@ const handleUpdateLoad = async () => {
                 onChange={(e) => setWeight(e.target.value)} style={styles.input} />
             </div>
             <div>
-              <span style={styles.label}>Tilavuus (m³)</span>
-              <input type="number" placeholder="Tilavuus (m³)" value={volume}
-                onChange={(e) => setVolume(e.target.value)} style={styles.input} />
+              <span style={styles.label}>Kollimäärä / lavojen määrä (kpl)</span>
+              <input type="number" placeholder="Määrä (kpl)" value={quantity}
+                onChange={(e) => setQuantity(e.target.value)} style={styles.input} />
             </div>
+          </div>
+
+          <div style={{ marginTop: "12px" }}>
+            <span style={styles.label}>Lavan mitat</span>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
+              <div>
+                <span style={styles.label}>Leveys (m)</span>
+                <input type="number" placeholder="esim. 0.8" value={palletWidth}
+                  onChange={(e) => setPalletWidth(e.target.value)} style={styles.input} />
+              </div>
+              <div>
+                <span style={styles.label}>Pituus (m)</span>
+                <input type="number" placeholder="esim. 1.2" value={palletLength}
+                  onChange={(e) => setPalletLength(e.target.value)} style={styles.input} />
+              </div>
+              <div>
+                <span style={styles.label}>Korkeus (m)</span>
+                <input type="number" placeholder="esim. 1.5" value={palletHeight}
+                  onChange={(e) => setPalletHeight(e.target.value)} style={styles.input} />
+              </div>
+            </div>
+          </div>
+
+          {lm !== null && vol !== null && (
+            <div style={styles.calcBox}>
+              <span style={{ marginRight: "24px" }}>📐 Lastausmetrit: <strong>{lm} lm</strong></span>
+              <span>📦 Tilavuus: <strong>{vol} m³</strong></span>
+            </div>
+          )}
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "12px" }}>
             <div>
               <span style={styles.label}>Vaadittu kärrytyyppi</span>
               <select value={requiredTrailerType}
@@ -484,27 +555,18 @@ const handleUpdateLoad = async () => {
           </div>
 
           <div style={{ marginTop: "16px" }}>
-  {editingLoad ? (
-    <>
-      <button onClick={handleUpdateLoad} style={styles.btnPrimary}>Tallenna muutokset</button>
-      <button onClick={() => {
-        setEditingLoad(null);
-        setName(""); setWeight(""); setVolume("");
-        setRequiredTrailerType("umpikaappi");
-        setRequiredDeliverySite("laituri");
-        setRequiresTemperature(false);
-        setMinTemperature(""); setMaxTemperature("");
-        setRequiredCompartment("koko kärry");
-        setNeedsSideLoading(false);
-      }} style={styles.btnDanger}>Peruuta</button>
-    </>
-  ) : (
-    <>
-      <button onClick={handleAddLoad} style={styles.btnPrimary}>Lisää kuorma</button>
-      <button onClick={handleClearLoads} style={styles.btnDanger}>Tyhjennä kaikki</button>
-    </>
-  )}
-</div>
+            {editingLoad ? (
+              <>
+                <button onClick={handleUpdateLoad} style={styles.btnPrimary}>Tallenna muutokset</button>
+                <button onClick={resetForm} style={styles.btnDanger}>Peruuta</button>
+              </>
+            ) : (
+              <>
+                <button onClick={handleAddLoad} style={styles.btnPrimary}>Lisää kuorma</button>
+                <button onClick={handleClearLoads} style={styles.btnDanger}>Tyhjennä kaikki</button>
+              </>
+            )}
+          </div>
         </div>
 
         <div style={styles.section}>
@@ -516,7 +578,7 @@ const handleUpdateLoad = async () => {
               <table style={styles.table}>
                 <thead>
                   <tr>
-                    {["Nimi", "Paino", "Tilavuus", "Vaadittu kärry", "Purkupaikka", "Min °C", "Max °C", "Sijoitus", "Sivulastaus", "Toiminto"].map((h) => (
+                    {["Nimi", "Paino", "Kpl", "Leveys", "Pituus", "Korkeus", "Lm", "Tilavuus", "Kärry", "Purkupaikka", "Min °C", "Max °C", "Sijoitus", "Sivulastaus", "Toiminto"].map((h) => (
                       <th key={h} style={styles.th}>{h}</th>
                     ))}
                   </tr>
@@ -528,6 +590,11 @@ const handleUpdateLoad = async () => {
                       <tr key={load.id}>
                         <td style={td}>{load.name}</td>
                         <td style={td}>{load.weight}</td>
+                        <td style={td}>{load.quantity}</td>
+                        <td style={td}>{load.pallet_width}</td>
+                        <td style={td}>{load.pallet_length}</td>
+                        <td style={td}>{load.pallet_height}</td>
+                        <td style={td}>{load.loading_meters}</td>
                         <td style={td}>{load.volume}</td>
                         <td style={td}>{load.required_trailer_type}</td>
                         <td style={td}>{load.required_delivery_site}</td>
@@ -537,11 +604,11 @@ const handleUpdateLoad = async () => {
                         <td style={td}>{load.needs_side_loading ? "Kyllä" : "Ei"}</td>
                         <td style={td}>
                           <button onClick={() => handleEditLoad(load)} style={{
-  ...styles.btnSmallDanger,
-  background: "#f97316",
-  marginRight: "6px"
-}}>Muokkaa</button>
-<button onClick={() => handleDeleteLoad(load.id)} style={styles.btnSmallDanger}>Poista</button>
+                            ...styles.btnSmallDanger,
+                            background: "#f97316",
+                            marginRight: "6px"
+                          }}>Muokkaa</button>
+                          <button onClick={() => handleDeleteLoad(load.id)} style={styles.btnSmallDanger}>Poista</button>
                         </td>
                       </tr>
                     );
@@ -555,20 +622,30 @@ const handleUpdateLoad = async () => {
         {summary && (
           <div style={styles.section}>
             <div style={styles.sectionTitle}>Yhteenveto</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "16px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "12px", marginBottom: "16px" }}>
               <div style={styles.statBox}>
                 <div style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "4px" }}>Kokonaispaino</div>
-                <div style={{ fontSize: "20px", fontWeight: "700", color: "#f1f5f9" }}>
-                  {summary.total_weight} kg
+                <div style={{ fontSize: "20px", fontWeight: "700", color: "#f1f5f9" }}>{summary.total_weight} kg</div>
+                <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "8px" }}>/ {summary.max_weight} kg ({summary.weight_usage_percent}%)</div>
+                <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: "999px", height: "8px", overflow: "hidden" }}>
+                  <div style={{ height: "100%", borderRadius: "999px", width: `${Math.min(summary.weight_usage_percent, 100)}%`, background: getBarColor(summary.weight_usage_percent), transition: "width 0.3s ease" }} />
                 </div>
-                <div style={{ fontSize: "12px", color: "#64748b" }}>/ {summary.max_weight} kg ({summary.weight_usage_percent}%)</div>
+              </div>
+              <div style={styles.statBox}>
+                <div style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "4px" }}>Lastausmetrit</div>
+                <div style={{ fontSize: "20px", fontWeight: "700", color: "#f1f5f9" }}>{summary.total_loading_meters} lm</div>
+                <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "8px" }}>/ {summary.max_loading_meters} lm ({summary.loading_meters_usage_percent}%)</div>
+                <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: "999px", height: "8px", overflow: "hidden" }}>
+                  <div style={{ height: "100%", borderRadius: "999px", width: `${Math.min(summary.loading_meters_usage_percent, 100)}%`, background: getBarColor(summary.loading_meters_usage_percent), transition: "width 0.3s ease" }} />
+                </div>
               </div>
               <div style={styles.statBox}>
                 <div style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "4px" }}>Kokonaistilavuus</div>
-                <div style={{ fontSize: "20px", fontWeight: "700", color: "#f1f5f9" }}>
-                  {summary.total_volume} m³
+                <div style={{ fontSize: "20px", fontWeight: "700", color: "#f1f5f9" }}>{summary.total_volume} m³</div>
+                <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "8px" }}>/ {summary.max_volume} m³ ({summary.volume_usage_percent}%)</div>
+                <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: "999px", height: "8px", overflow: "hidden" }}>
+                  <div style={{ height: "100%", borderRadius: "999px", width: `${Math.min(summary.volume_usage_percent, 100)}%`, background: getBarColor(summary.volume_usage_percent), transition: "width 0.3s ease" }} />
                 </div>
-                <div style={{ fontSize: "12px", color: "#64748b" }}>/ {summary.max_volume} m³ ({summary.volume_usage_percent}%)</div>
               </div>
               <div style={styles.statBox}>
                 <div style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "4px" }}>Kokonaisstatus</div>

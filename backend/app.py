@@ -8,6 +8,8 @@ CORS(app)
 DB_NAME = "loads.db"
 MAX_WEIGHT = 24000
 MAX_VOLUME = 90
+MAX_LOADING_METERS = 13.6
+TRAILER_WIDTH = 2.4
 
 TRAILER_TYPES = {
     "umpikaappi": {
@@ -49,6 +51,14 @@ def get_db_connection():
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def calculate_loading_meters(pallet_width, pallet_length, quantity):
+    return round((pallet_width * pallet_length / TRAILER_WIDTH) * quantity, 2)
+
+
+def calculate_volume(pallet_width, pallet_length, pallet_height, quantity):
+    return round(pallet_width * pallet_length * pallet_height * quantity, 2)
 
 
 def get_candidate_compartments(load, trailer):
@@ -193,8 +203,13 @@ def load_fits_trailer(load, selected_trailer_type, trailer_temperature_config):
 def calculate_summary(loads, selected_trailer_type, trailer_temperature_config):
     total_weight = sum(load["weight"] for load in loads)
     total_volume = sum(load["volume"] for load in loads)
+    total_loading_meters = sum(load["loading_meters"] for load in loads)
 
-    fits_capacity = total_weight <= MAX_WEIGHT and total_volume <= MAX_VOLUME
+    fits_capacity = (
+        total_weight <= MAX_WEIGHT and
+        total_volume <= MAX_VOLUME and
+        total_loading_meters <= MAX_LOADING_METERS
+    )
 
     load_checks = []
     all_rules_ok = True
@@ -218,13 +233,16 @@ def calculate_summary(loads, selected_trailer_type, trailer_temperature_config):
     return {
         "total_weight": round(total_weight, 2),
         "total_volume": round(total_volume, 2),
+        "total_loading_meters": round(total_loading_meters, 2),
         "weight_usage_percent": round((total_weight / MAX_WEIGHT) * 100, 2),
         "volume_usage_percent": round((total_volume / MAX_VOLUME) * 100, 2),
+        "loading_meters_usage_percent": round((total_loading_meters / MAX_LOADING_METERS) * 100, 2),
         "fits_capacity": fits_capacity,
         "fits_trailer_rules": all_rules_ok,
         "fits": overall_fits,
         "max_weight": MAX_WEIGHT,
         "max_volume": MAX_VOLUME,
+        "max_loading_meters": MAX_LOADING_METERS,
         "selected_trailer_type": selected_trailer_type,
         "trailer_temperature_config": trailer_temperature_config,
         "load_checks": load_checks
@@ -264,7 +282,8 @@ def get_loads():
 
     conn = get_db_connection()
     rows = conn.execute("""
-        SELECT id, name, weight, volume, required_trailer_type,
+        SELECT id, name, weight, quantity, pallet_width, pallet_length, pallet_height,
+               loading_meters, volume, required_trailer_type,
                needs_side_loading, required_delivery_site,
                min_temperature, max_temperature, required_compartment
         FROM loads
@@ -295,7 +314,10 @@ def add_load():
 
     name = data.get("name", "").strip()
     weight = data.get("weight")
-    volume = data.get("volume")
+    quantity = data.get("quantity")
+    pallet_width = data.get("pallet_width")
+    pallet_length = data.get("pallet_length")
+    pallet_height = data.get("pallet_height")
     required_trailer_type = data.get("required_trailer_type", "").strip()
     required_delivery_site = data.get("required_delivery_site", "").strip()
     min_temperature = data.get("min_temperature")
@@ -317,12 +339,18 @@ def add_load():
 
     try:
         weight = float(weight)
-        volume = float(volume)
+        quantity = int(quantity)
+        pallet_width = float(pallet_width)
+        pallet_length = float(pallet_length)
+        pallet_height = float(pallet_height)
     except (TypeError, ValueError):
-        return jsonify({"error": "Painon ja tilavuuden pitää olla numeroita"}), 400
+        return jsonify({"error": "Tarkista syötetyt arvot"}), 400
 
-    if weight <= 0 or volume <= 0:
-        return jsonify({"error": "Painon ja tilavuuden pitää olla positiivisia"}), 400
+    if weight <= 0 or quantity <= 0 or pallet_width <= 0 or pallet_length <= 0 or pallet_height <= 0:
+        return jsonify({"error": "Arvojen pitää olla positiivisia"}), 400
+
+    loading_meters = calculate_loading_meters(pallet_width, pallet_length, quantity)
+    volume = calculate_volume(pallet_width, pallet_length, pallet_height, quantity)
 
     if min_temperature not in [None, ""]:
         try:
@@ -347,26 +375,116 @@ def add_load():
     conn = get_db_connection()
     conn.execute("""
         INSERT INTO loads (
-            name, weight, volume, required_trailer_type,
+            name, weight, quantity, pallet_width, pallet_length, pallet_height,
+            loading_meters, volume, required_trailer_type,
             needs_side_loading, required_delivery_site,
             min_temperature, max_temperature, required_compartment
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
-        name,
-        weight,
-        volume,
-        required_trailer_type,
-        int(needs_side_loading),
-        required_delivery_site,
-        min_temperature,
-        max_temperature,
-        required_compartment
+        name, weight, quantity, pallet_width, pallet_length, pallet_height,
+        loading_meters, volume, required_trailer_type,
+        int(needs_side_loading), required_delivery_site,
+        min_temperature, max_temperature, required_compartment
     ))
     conn.commit()
     conn.close()
 
     return jsonify({"message": "Kuorma lisätty"}), 201
+
+
+@app.route("/api/loads/<int:load_id>", methods=["PUT"])
+def update_load(load_id):
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "Puuttuva JSON-data"}), 400
+
+    name = data.get("name", "").strip()
+    weight = data.get("weight")
+    quantity = data.get("quantity")
+    pallet_width = data.get("pallet_width")
+    pallet_length = data.get("pallet_length")
+    pallet_height = data.get("pallet_height")
+    required_trailer_type = data.get("required_trailer_type", "").strip()
+    required_delivery_site = data.get("required_delivery_site", "").strip()
+    min_temperature = data.get("min_temperature")
+    max_temperature = data.get("max_temperature")
+    required_compartment = data.get("required_compartment", "koko kärry").strip()
+    needs_side_loading = bool(data.get("needs_side_loading", False))
+
+    if not name:
+        return jsonify({"error": "Kuorman nimi on pakollinen"}), 400
+
+    if required_trailer_type not in TRAILER_TYPES:
+        return jsonify({"error": "Virheellinen kärrytyyppi"}), 400
+
+    if required_delivery_site not in DELIVERY_SITES:
+        return jsonify({"error": "Virheellinen purkupaikka"}), 400
+
+    if required_compartment not in COMPARTMENTS:
+        return jsonify({"error": "Virheellinen osasto"}), 400
+
+    try:
+        weight = float(weight)
+        quantity = int(quantity)
+        pallet_width = float(pallet_width)
+        pallet_length = float(pallet_length)
+        pallet_height = float(pallet_height)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Tarkista syötetyt arvot"}), 400
+
+    if weight <= 0 or quantity <= 0 or pallet_width <= 0 or pallet_length <= 0 or pallet_height <= 0:
+        return jsonify({"error": "Arvojen pitää olla positiivisia"}), 400
+
+    loading_meters = calculate_loading_meters(pallet_width, pallet_length, quantity)
+    volume = calculate_volume(pallet_width, pallet_length, pallet_height, quantity)
+
+    if min_temperature not in [None, ""]:
+        try:
+            min_temperature = float(min_temperature)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Minimilämpötilan pitää olla numero"}), 400
+    else:
+        min_temperature = None
+
+    if max_temperature not in [None, ""]:
+        try:
+            max_temperature = float(max_temperature)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Maksimilämpötilan pitää olla numero"}), 400
+    else:
+        max_temperature = None
+
+    if min_temperature is not None and max_temperature is not None:
+        if min_temperature > max_temperature:
+            return jsonify({"error": "Minimilämpötila ei voi olla suurempi kuin maksimilämpötila"}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE loads SET
+            name = ?, weight = ?, quantity = ?,
+            pallet_width = ?, pallet_length = ?, pallet_height = ?,
+            loading_meters = ?, volume = ?,
+            required_trailer_type = ?, needs_side_loading = ?,
+            required_delivery_site = ?, min_temperature = ?,
+            max_temperature = ?, required_compartment = ?
+        WHERE id = ?
+    """, (
+        name, weight, quantity, pallet_width, pallet_length, pallet_height,
+        loading_meters, volume, required_trailer_type,
+        int(needs_side_loading), required_delivery_site,
+        min_temperature, max_temperature, required_compartment, load_id
+    ))
+    conn.commit()
+    updated = cursor.rowcount
+    conn.close()
+
+    if updated == 0:
+        return jsonify({"error": "Kuormaa ei löytynyt"}), 404
+
+    return jsonify({"message": "Kuorma päivitetty"})
 
 
 @app.route("/api/loads/<int:load_id>", methods=["DELETE"])
@@ -393,98 +511,6 @@ def clear_loads():
 
     return jsonify({"message": "Kaikki kuormat poistettu"})
 
-@app.route("/api/loads/<int:load_id>", methods=["PUT"])
-def update_load(load_id):
-    data = request.get_json()
-
-    if not data:
-        return jsonify({"error": "Puuttuva JSON-data"}), 400
-
-    name = data.get("name", "").strip()
-    weight = data.get("weight")
-    volume = data.get("volume")
-    required_trailer_type = data.get("required_trailer_type", "").strip()
-    required_delivery_site = data.get("required_delivery_site", "").strip()
-    min_temperature = data.get("min_temperature")
-    max_temperature = data.get("max_temperature")
-    required_compartment = data.get("required_compartment", "koko kärry").strip()
-    needs_side_loading = bool(data.get("needs_side_loading", False))
-
-    if not name:
-        return jsonify({"error": "Kuorman nimi on pakollinen"}), 400
-
-    if required_trailer_type not in TRAILER_TYPES:
-        return jsonify({"error": "Virheellinen kärrytyyppi"}), 400
-
-    if required_delivery_site not in DELIVERY_SITES:
-        return jsonify({"error": "Virheellinen purkupaikka"}), 400
-
-    if required_compartment not in COMPARTMENTS:
-        return jsonify({"error": "Virheellinen osasto"}), 400
-
-    try:
-        weight = float(weight)
-        volume = float(volume)
-    except (TypeError, ValueError):
-        return jsonify({"error": "Painon ja tilavuuden pitää olla numeroita"}), 400
-
-    if weight <= 0 or volume <= 0:
-        return jsonify({"error": "Painon ja tilavuuden pitää olla positiivisia"}), 400
-
-    if min_temperature not in [None, ""]:
-        try:
-            min_temperature = float(min_temperature)
-        except (TypeError, ValueError):
-            return jsonify({"error": "Minimilämpötilan pitää olla numero"}), 400
-    else:
-        min_temperature = None
-
-    if max_temperature not in [None, ""]:
-        try:
-            max_temperature = float(max_temperature)
-        except (TypeError, ValueError):
-            return jsonify({"error": "Maksimilämpötilan pitää olla numero"}), 400
-    else:
-        max_temperature = None
-
-    if min_temperature is not None and max_temperature is not None:
-        if min_temperature > max_temperature:
-            return jsonify({"error": "Minimilämpötila ei voi olla suurempi kuin maksimilämpötila"}), 400
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE loads SET
-            name = ?,
-            weight = ?,
-            volume = ?,
-            required_trailer_type = ?,
-            needs_side_loading = ?,
-            required_delivery_site = ?,
-            min_temperature = ?,
-            max_temperature = ?,
-            required_compartment = ?
-        WHERE id = ?
-    """, (
-        name,
-        weight,
-        volume,
-        required_trailer_type,
-        int(needs_side_loading),
-        required_delivery_site,
-        min_temperature,
-        max_temperature,
-        required_compartment,
-        load_id
-    ))
-    conn.commit()
-    updated = cursor.rowcount
-    conn.close()
-
-    if updated == 0:
-        return jsonify({"error": "Kuormaa ei löytynyt"}), 404
-
-    return jsonify({"message": "Kuorma päivitetty"})
 
 if __name__ == "__main__":
     app.run(debug=True)
