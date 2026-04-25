@@ -393,6 +393,98 @@ def clear_loads():
 
     return jsonify({"message": "Kaikki kuormat poistettu"})
 
+@app.route("/api/loads/<int:load_id>", methods=["PUT"])
+def update_load(load_id):
+    data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "Puuttuva JSON-data"}), 400
+
+    name = data.get("name", "").strip()
+    weight = data.get("weight")
+    volume = data.get("volume")
+    required_trailer_type = data.get("required_trailer_type", "").strip()
+    required_delivery_site = data.get("required_delivery_site", "").strip()
+    min_temperature = data.get("min_temperature")
+    max_temperature = data.get("max_temperature")
+    required_compartment = data.get("required_compartment", "koko kärry").strip()
+    needs_side_loading = bool(data.get("needs_side_loading", False))
+
+    if not name:
+        return jsonify({"error": "Kuorman nimi on pakollinen"}), 400
+
+    if required_trailer_type not in TRAILER_TYPES:
+        return jsonify({"error": "Virheellinen kärrytyyppi"}), 400
+
+    if required_delivery_site not in DELIVERY_SITES:
+        return jsonify({"error": "Virheellinen purkupaikka"}), 400
+
+    if required_compartment not in COMPARTMENTS:
+        return jsonify({"error": "Virheellinen osasto"}), 400
+
+    try:
+        weight = float(weight)
+        volume = float(volume)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Painon ja tilavuuden pitää olla numeroita"}), 400
+
+    if weight <= 0 or volume <= 0:
+        return jsonify({"error": "Painon ja tilavuuden pitää olla positiivisia"}), 400
+
+    if min_temperature not in [None, ""]:
+        try:
+            min_temperature = float(min_temperature)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Minimilämpötilan pitää olla numero"}), 400
+    else:
+        min_temperature = None
+
+    if max_temperature not in [None, ""]:
+        try:
+            max_temperature = float(max_temperature)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Maksimilämpötilan pitää olla numero"}), 400
+    else:
+        max_temperature = None
+
+    if min_temperature is not None and max_temperature is not None:
+        if min_temperature > max_temperature:
+            return jsonify({"error": "Minimilämpötila ei voi olla suurempi kuin maksimilämpötila"}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE loads SET
+            name = ?,
+            weight = ?,
+            volume = ?,
+            required_trailer_type = ?,
+            needs_side_loading = ?,
+            required_delivery_site = ?,
+            min_temperature = ?,
+            max_temperature = ?,
+            required_compartment = ?
+        WHERE id = ?
+    """, (
+        name,
+        weight,
+        volume,
+        required_trailer_type,
+        int(needs_side_loading),
+        required_delivery_site,
+        min_temperature,
+        max_temperature,
+        required_compartment,
+        load_id
+    ))
+    conn.commit()
+    updated = cursor.rowcount
+    conn.close()
+
+    if updated == 0:
+        return jsonify({"error": "Kuormaa ei löytynyt"}), 404
+
+    return jsonify({"message": "Kuorma päivitetty"})
 
 if __name__ == "__main__":
     app.run(debug=True)

@@ -171,6 +171,7 @@ function LoadPlanner() {
   const [loads, setLoads] = useState([]);
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState("");
+  const [editingLoad, setEditingLoad] = useState(null);
 
   const fetchInitialData = async () => {
     try {
@@ -288,6 +289,64 @@ function LoadPlanner() {
     }
   };
 
+const handleEditLoad = (load) => {
+  setEditingLoad(load);
+  setName(load.name);
+  setWeight(load.weight);
+  setVolume(load.volume);
+  setRequiredTrailerType(load.required_trailer_type);
+  setRequiredDeliverySite(load.required_delivery_site);
+  setRequiresTemperature(load.min_temperature !== null || load.max_temperature !== null);
+  setMinTemperature(load.min_temperature ?? "");
+  setMaxTemperature(load.max_temperature ?? "");
+  setRequiredCompartment(load.required_compartment);
+  setNeedsSideLoading(load.needs_side_loading);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+};
+
+const handleUpdateLoad = async () => {
+  setError("");
+  if (!name || !weight || !volume) {
+    setError("Täytä nimi, paino ja tilavuus.");
+    return;
+  }
+  try {
+    const response = await fetch(`${API_URL}/${editingLoad.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        weight: Number(weight),
+        volume: Number(volume),
+        required_trailer_type: requiredTrailerType,
+        required_delivery_site: requiredDeliverySite,
+        min_temperature: requiresTemperature && minTemperature !== "" ? Number(minTemperature) : null,
+        max_temperature: requiresTemperature && maxTemperature !== "" ? Number(maxTemperature) : null,
+        required_compartment: requiresTemperature
+          ? requiredCompartment
+          : (requiredTrailerType === "umpikaappi 2:lla kylmäkoneella" ? "osasto ei väliä" : "koko kärry"),
+        needs_side_loading: needsSideLoading
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setError(data.error || "Kuorman päivitys epäonnistui.");
+      return;
+    }
+    setEditingLoad(null);
+    setName(""); setWeight(""); setVolume("");
+    setRequiredTrailerType("umpikaappi");
+    setRequiredDeliverySite("laituri");
+    setRequiresTemperature(false);
+    setMinTemperature(""); setMaxTemperature("");
+    setRequiredCompartment("koko kärry");
+    setNeedsSideLoading(false);
+    fetchLoads();
+  } catch (err) {
+    setError("Palvelinyhteys epäonnistui.");
+  }
+};
+  
   return (
     <div style={{ background: "transparent", minHeight: "100vh", padding: "24px" }}>
       <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
@@ -425,9 +484,27 @@ function LoadPlanner() {
           </div>
 
           <div style={{ marginTop: "16px" }}>
-            <button onClick={handleAddLoad} style={styles.btnPrimary}>Lisää kuorma</button>
-            <button onClick={handleClearLoads} style={styles.btnDanger}>Tyhjennä kaikki</button>
-          </div>
+  {editingLoad ? (
+    <>
+      <button onClick={handleUpdateLoad} style={styles.btnPrimary}>Tallenna muutokset</button>
+      <button onClick={() => {
+        setEditingLoad(null);
+        setName(""); setWeight(""); setVolume("");
+        setRequiredTrailerType("umpikaappi");
+        setRequiredDeliverySite("laituri");
+        setRequiresTemperature(false);
+        setMinTemperature(""); setMaxTemperature("");
+        setRequiredCompartment("koko kärry");
+        setNeedsSideLoading(false);
+      }} style={styles.btnDanger}>Peruuta</button>
+    </>
+  ) : (
+    <>
+      <button onClick={handleAddLoad} style={styles.btnPrimary}>Lisää kuorma</button>
+      <button onClick={handleClearLoads} style={styles.btnDanger}>Tyhjennä kaikki</button>
+    </>
+  )}
+</div>
         </div>
 
         <div style={styles.section}>
@@ -459,7 +536,12 @@ function LoadPlanner() {
                         <td style={td}>{load.required_compartment}</td>
                         <td style={td}>{load.needs_side_loading ? "Kyllä" : "Ei"}</td>
                         <td style={td}>
-                          <button onClick={() => handleDeleteLoad(load.id)} style={styles.btnSmallDanger}>Poista</button>
+                          <button onClick={() => handleEditLoad(load)} style={{
+  ...styles.btnSmallDanger,
+  background: "#f97316",
+  marginRight: "6px"
+}}>Muokkaa</button>
+<button onClick={() => handleDeleteLoad(load.id)} style={styles.btnSmallDanger}>Poista</button>
                         </td>
                       </tr>
                     );
