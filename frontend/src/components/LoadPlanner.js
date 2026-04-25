@@ -686,6 +686,29 @@ const warnings = getCapacityWarning();
         {summary && (
           <div style={styles.section}>
             <div style={styles.sectionTitle}>Yhteenveto</div>
+            <div style={{ 
+                display: "grid", 
+                gridTemplateColumns: "1fr 1fr 1fr", 
+                gap: "12px", 
+                marginBottom: "16px",
+                padding: "12px 16px",
+                background: "rgba(249,115,22,0.08)",
+                borderRadius: "8px",
+                border: "1px solid rgba(249,115,22,0.2)"
+              }}>
+                <div style={{ fontSize: "13px", color: "#94a3b8" }}>
+                  <span style={{ color: "#f97316", fontWeight: "600" }}>Jäljellä paino: </span>
+                  {Math.round(summary.max_weight - summary.total_weight)} kg
+                </div>
+                <div style={{ fontSize: "13px", color: "#94a3b8" }}>
+                  <span style={{ color: "#f97316", fontWeight: "600" }}>Jäljellä lm: </span>
+                  {Math.round((summary.max_loading_meters - summary.total_loading_meters) * 100) / 100} lm
+                </div>
+                <div style={{ fontSize: "13px", color: "#94a3b8" }}>
+                  <span style={{ color: "#f97316", fontWeight: "600" }}>Jäljellä tilavuus: </span>
+                  {Math.round((summary.max_volume - summary.total_volume) * 100) / 100} m³
+                </div>
+              </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "12px", marginBottom: "16px" }}>
               <div style={styles.statBox}>
                 <div style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "4px" }}>Kokonaispaino</div>
