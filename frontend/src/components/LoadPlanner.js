@@ -13,7 +13,7 @@ const styles = {
     marginBottom: "24px",
     boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
     backdropFilter: "blur(10px)",
-    border: "1px solid rgba(255,255,255,0.1)"
+    border: "1px solid rgba(249,115,22,0.4)"
   },
   sectionTitle: {
     fontSize: "18px",
@@ -55,7 +55,7 @@ const styles = {
     padding: "10px 20px",
     borderRadius: "8px",
     border: "none",
-    background: "#3b82f6",
+    background: "#f97316",
     color: "#fff",
     fontWeight: "600",
     fontSize: "14px",
@@ -293,7 +293,7 @@ function LoadPlanner() {
       <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
 
         <div style={{ marginBottom: "24px" }}>
-          <h1 style={{ fontSize: "28px", fontWeight: "700", color: "#f1f5f9", margin: 0 }}>
+          <h1 style={{ fontSize: "28px", fontWeight: "700", color: "#f97316", margin: 0 }}>
             🚛 Trailer Load Planner
           </h1>
           <p style={{ color: "#94a3b8", marginTop: "4px" }}>
