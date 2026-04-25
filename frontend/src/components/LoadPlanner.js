@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from "react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const API_URL = "http://127.0.0.1:5000/api/loads";
 const TRAILER_TYPES_URL = "http://127.0.0.1:5000/api/trailer-types";
@@ -400,6 +402,56 @@ function LoadPlanner() {
 
 const warnings = getCapacityWarning();
 
+const generatePDF = () => {
+  const doc = new jsPDF();
+
+  doc.setFontSize(18);
+  doc.setTextColor(249, 115, 22);
+  doc.text("Trailer Load Planner - Yhteenveto", 14, 20);
+
+  doc.setFontSize(11);
+  doc.setTextColor(0, 0, 0);
+  doc.text(`Kärrytyyppi: ${summary.selected_trailer_type}`, 14, 32);
+  doc.text(`Päivämäärä: ${new Date().toLocaleDateString("fi-FI")}`, 14, 40);
+
+  doc.setFontSize(13);
+  doc.setTextColor(249, 115, 22);
+  doc.text("Kapasiteetti", 14, 52);
+
+  doc.setFontSize(11);
+  doc.setTextColor(0, 0, 0);
+  doc.text(`Kokonaispaino: ${summary.total_weight} kg / ${summary.max_weight} kg (${summary.weight_usage_percent}%)`, 14, 62);
+  doc.text(`Lastausmetrit: ${summary.total_loading_meters} lm / ${summary.max_loading_meters} lm (${summary.loading_meters_usage_percent}%)`, 14, 70);
+  doc.text(`Kokonaistilavuus: ${summary.total_volume} m³ / ${summary.max_volume} m³ (${summary.volume_usage_percent}%)`, 14, 78);
+  doc.text(`Kokonaisstatus: ${summary.fits ? "Kuormat sopivat" : "Kuormat eivät sovi"}`, 14, 86);
+
+  doc.setFontSize(13);
+  doc.setTextColor(249, 115, 22);
+  doc.text("Kuormat", 14, 98);
+
+  autoTable(doc, {
+    startY: 104,
+    head: [["Nimi", "Paino", "Kpl", "Lm", "Tilavuus", "Kärry", "Purkupaikka", "Status"]],
+    body: summary.load_checks.map((check) => {
+      const load = loads.find((l) => l.id === check.id);
+      return [
+        check.name,
+        load ? `${load.weight} kg` : "-",
+        load ? load.quantity : "-",
+        load ? `${load.loading_meters} lm` : "-",
+        load ? `${load.volume} m³` : "-",
+        load ? load.required_trailer_type : "-",
+        load ? load.required_delivery_site : "-",
+        check.fits_trailer ? "OK" : "Ei sovi"
+      ];
+    }),
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [249, 115, 22] }
+  });
+
+  doc.save("trailer-load-planner.pdf");
+};
+
   return (
     <div style={{ background: "transparent", minHeight: "100vh", padding: "24px" }}>
       <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
@@ -685,7 +737,21 @@ const warnings = getCapacityWarning();
 
         {summary && (
           <div style={styles.section}>
-            <div style={styles.sectionTitle}>Yhteenveto</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", paddingBottom: "8px", borderBottom: "2px solid rgba(255,255,255,0.1)" }}>
+              <span style={{ fontSize: "18px", fontWeight: "600", color: "#f1f5f9" }}>Yhteenveto</span>
+              <button onClick={generatePDF} style={{
+                padding: "8px 16px",
+                borderRadius: "8px",
+                border: "none",
+                background: "#f97316",
+                color: "#fff",
+                fontWeight: "600",
+                fontSize: "13px",
+                cursor: "pointer"
+              }}>
+                📄 Lataa PDF
+              </button>
+            </div>
             <div style={{ 
                 display: "grid", 
                 gridTemplateColumns: "1fr 1fr 1fr", 
