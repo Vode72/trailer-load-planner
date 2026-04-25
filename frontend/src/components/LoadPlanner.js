@@ -386,6 +386,20 @@ function LoadPlanner() {
   const lm = calcLoadingMeters();
   const vol = calcVolume();
 
+  const getCapacityWarning = () => {
+  if (!summary) return null;
+  const warnings = [];
+  if (summary.weight_usage_percent > 95) warnings.push(`⚠️ Paino kriittinen: ${summary.weight_usage_percent}%`);
+  else if (summary.weight_usage_percent > 80) warnings.push(`⚡ Paino lähestyy rajaa: ${summary.weight_usage_percent}%`);
+  if (summary.loading_meters_usage_percent > 95) warnings.push(`⚠️ Lastausmetrit kriittiset: ${summary.loading_meters_usage_percent}%`);
+  else if (summary.loading_meters_usage_percent > 80) warnings.push(`⚡ Lastausmetrit lähestyy rajaa: ${summary.loading_meters_usage_percent}%`);
+  if (summary.volume_usage_percent > 95) warnings.push(`⚠️ Tilavuus kriittinen: ${summary.volume_usage_percent}%`);
+  else if (summary.volume_usage_percent > 80) warnings.push(`⚡ Tilavuus lähestyy rajaa: ${summary.volume_usage_percent}%`);
+  return warnings.length > 0 ? warnings : null;
+};
+
+const warnings = getCapacityWarning();
+
   return (
     <div style={{ background: "transparent", minHeight: "100vh", padding: "24px" }}>
       <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
@@ -400,6 +414,24 @@ function LoadPlanner() {
         </div>
 
         <div style={styles.section}>
+          {warnings && (
+            <div style={{ marginBottom: "16px" }}>
+              {warnings.map((w, i) => (
+                <div key={i} style={{
+                  padding: "10px 16px",
+                  borderRadius: "8px",
+                  marginBottom: "8px",
+                  background: w.startsWith("⚠️") ? "rgba(239,68,68,0.15)" : "rgba(245,158,11,0.15)",
+                  border: `1px solid ${w.startsWith("⚠️") ? "rgba(239,68,68,0.4)" : "rgba(245,158,11,0.4)"}`,
+                  color: w.startsWith("⚠️") ? "#fca5a5" : "#fcd34d",
+                  fontSize: "14px",
+                  fontWeight: "500"
+                }}>
+                  {w}
+                </div>
+              ))}
+            </div>
+          )}
           <div style={styles.sectionTitle}>Käytettävä kärrytyyppi</div>
           <span style={styles.label}>Valitse kärry</span>
           <select value={selectedTrailerType}
