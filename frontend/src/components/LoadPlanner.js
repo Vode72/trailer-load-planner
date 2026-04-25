@@ -451,6 +451,38 @@ function LoadPlanner() {
           </div>
 
           <div style={{ marginTop: "12px" }}>
+            <div style={{ marginBottom: "12px" }}>
+              <span style={styles.label}>Valitse lavakoko (tai syötä mitat alla)</span>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {[
+                  { label: "EUR-lava 0.8×1.2", w: 0.8, l: 1.2 },
+                  { label: "FIN-lava 1.0×1.2", w: 1.0, l: 1.2 },
+                  { label: "Puolilava 0.6×0.8", w: 0.6, l: 0.8 },
+                  { label: "Teollisuuslava 1.2×1.6", w: 1.2, l: 1.6 }
+                ].map((pallet) => (
+                  <button
+                    key={pallet.label}
+                    onClick={() => {
+                      setPalletWidth(pallet.w);
+                      setPalletLength(pallet.l);
+                    }}
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: "8px",
+                      border: "1px solid rgba(249,115,22,0.5)",
+                      background: palletWidth === pallet.w && palletLength === pallet.l
+                        ? "#f97316"
+                        : "rgba(249,115,22,0.1)",
+                      color: "#f1f5f9",
+                      cursor: "pointer",
+                      fontSize: "13px"
+                    }}
+                  >
+                    {pallet.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <span style={styles.label}>Lavan mitat</span>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
               <div>
